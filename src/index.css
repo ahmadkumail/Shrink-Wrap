@@ -1,0 +1,193 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Shrink Wrap Design System - Clean, Modern SaaS */
+    --background: 210 20% 99%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    /* Primary: Teal/Cyan - represents efficiency & compression */
+    --primary: 193 90% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Light cool gray */
+    --secondary: 210 25% 96%;
+    --secondary-foreground: 220 25% 25%;
+
+    /* Muted for subtle elements */
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 15% 50%;
+
+    /* Accent: Emerald for success states */
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Pro/Premium: Violet */
+    --pro: 262 83% 58%;
+    --pro-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 193 90% 45%;
+
+    --radius: 0.625rem;
+
+    /* Custom tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(193 90% 45%), hsl(180 85% 40%));
+    --gradient-hero: linear-gradient(180deg, hsl(210 20% 99%) 0%, hsl(193 30% 95%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(210 20% 98%) 100%);
+    --gradient-pro: linear-gradient(135deg, hsl(262 83% 58%), hsl(280 80% 55%));
+    
+    --shadow-soft: 0 2px 8px -2px hsl(220 25% 10% / 0.08);
+    --shadow-card: 0 4px 20px -4px hsl(220 25% 10% / 0.1);
+    --shadow-elevated: 0 12px 40px -8px hsl(220 25% 10% / 0.15);
+    --shadow-glow: 0 0 40px -10px hsl(193 90% 45% / 0.3);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 193 90% 45%;
+  }
+
+  .dark {
+    --background: 220 25% 6%;
+    --foreground: 210 20% 98%;
+
+    --card: 220 25% 8%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 220 25% 8%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 193 90% 50%;
+    --primary-foreground: 220 25% 6%;
+
+    --secondary: 220 20% 14%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 220 20% 14%;
+    --muted-foreground: 215 15% 60%;
+
+    --accent: 160 84% 45%;
+    --accent-foreground: 220 25% 6%;
+
+    --pro: 262 83% 65%;
+    --pro-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 193 90% 50%;
+
+    --sidebar-background: 220 25% 8%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 193 90% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 14%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 193 90% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: hsl(var(--primary));
+  }
+  
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+  
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .gradient-pro {
+    background: var(--gradient-pro);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}

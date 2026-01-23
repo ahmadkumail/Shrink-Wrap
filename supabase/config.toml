@@ -1,0 +1,4 @@
+project_id = "dpyridgbtjbunenwpzmm"
+
+[functions.doc-to-pdf]
+verify_jwt = false
