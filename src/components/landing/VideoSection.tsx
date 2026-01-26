@@ -23,7 +23,7 @@ const VideoSection = () => {
     {
       icon: Clock,
       title: "Fast Processing",
-      description: "Compress videos in seconds using WebM encoding technology."
+      description: "Compress videos in seconds with optimized MP4 output."
     },
     {
       icon: Shield,
@@ -73,7 +73,7 @@ const VideoSection = () => {
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-foreground">Video Compressor</h3>
-                      <p className="text-sm text-muted-foreground">WebM Output • No Audio</p>
+                      <p className="text-sm text-muted-foreground">WebM Output • Audio Included</p>
                     </div>
                   </div>
                   

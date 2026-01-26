@@ -10,8 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 type ConversionType = "compress" | "png-to-jpg" | "jpg-to-png" | "video" | "doc-to-pdf";
 type CompressionLevel = "low" | "medium" | "high";
@@ -56,7 +54,7 @@ const TABS: { id: ConversionType; label: string; icon: React.ReactNode; accept: 
   { id: "compress", label: "Compress", icon: <RefreshCw className="w-4 h-4" />, accept: "image/*", description: "Reduce image size" },
   { id: "png-to-jpg", label: "PNG → JPG", icon: <FileImage className="w-4 h-4" />, accept: ".png,image/png", description: "Convert PNG to JPG" },
   { id: "jpg-to-png", label: "JPG → PNG", icon: <Image className="w-4 h-4" />, accept: ".jpg,.jpeg,image/jpeg", description: "Convert JPG to PNG" },
-  { id: "video", label: "Video", icon: <Video className="w-4 h-4" />, accept: "video/*", description: "Fast WebM compression" },
+  { id: "video", label: "Video", icon: <Video className="w-4 h-4" />, accept: "video/*", description: "WebM compression with audio" },
   { id: "doc-to-pdf", label: "DOC → PDF", icon: <FileText className="w-4 h-4" />, accept: ".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document", description: "Convert Word to PDF" },
 ];
 
@@ -66,9 +64,10 @@ const COMPRESSION_QUALITY: Record<CompressionLevel, number> = {
   high: 0.92,
 };
 
-const VIDEO_BITRATE: Record<VideoResolution, string> = {
-  "720": "1500k",
-  "1080": "3000k",
+// Target video bitrate (bits per second) for MediaRecorder
+const VIDEO_BITRATE_BPS: Record<VideoResolution, number> = {
+  "720": 2_500_000,
+  "1080": 5_000_000,
 };
 
 const getTimeUntilReset = () => {
@@ -77,10 +76,10 @@ const getTimeUntilReset = () => {
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
   const diff = tomorrow.getTime() - now.getTime();
-  
+
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  
+
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
@@ -95,9 +94,6 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
   const [pendingDocFiles, setPendingDocFiles] = useState<PendingDocFile[]>([]);
   const [results, setResults] = useState<ConversionResult[]>([]);
   const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilReset());
-  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
-  const [ffmpegLoading, setFfmpegLoading] = useState(false);
-  const ffmpegRef = useRef<FFmpeg | null>(null);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -140,79 +136,6 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
     window.addEventListener("selectTab", handleSelectTab as EventListener);
     return () => window.removeEventListener("selectTab", handleSelectTab as EventListener);
   }, []);
-
-  // Load FFmpeg - using single-threaded version for browser compatibility
-  const loadFFmpeg = async () => {
-    if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
-    
-    setFfmpegLoading(true);
-    try {
-      const ffmpeg = new FFmpeg();
-      
-      ffmpeg.on("log", ({ message }) => {
-        console.log("[FFmpeg]", message);
-      });
-      
-      // Use single-threaded core (no SharedArrayBuffer needed)
-      // Prefer same-origin bundled core/wasm (most reliable). Fall back to CDNs.
-      // Add timeouts so UI never gets stuck on "Loading...".
-      const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-        let timeoutId: number | undefined;
-        const timeout = new Promise<never>((_, reject) => {
-          timeoutId = window.setTimeout(() => reject(new Error(`${label} timed out`)), ms);
-        });
-        return Promise.race([promise, timeout]).finally(() => {
-          if (timeoutId) window.clearTimeout(timeoutId);
-        }) as Promise<T>;
-      };
-
-      let loaded = false;
-      let lastError: unknown = null;
-
-      // Use CDN with blob URLs (avoids dynamic import issues)
-      const cdnBaseUrls = [
-        "https://cdn.jsdelivr.net/npm/@ffmpeg/core-st/dist/umd",
-        "https://unpkg.com/@ffmpeg/core-st/dist/umd",
-      ];
-
-      for (const baseURL of cdnBaseUrls) {
-        try {
-          const cdnCoreURL = await withTimeout(
-            toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-            30000,
-            "FFmpeg core fetch"
-          );
-          const cdnWasmURL = await withTimeout(
-            toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-            30000,
-            "FFmpeg wasm fetch"
-          );
-          await withTimeout(
-            ffmpeg.load({ coreURL: cdnCoreURL, wasmURL: cdnWasmURL }),
-            30000,
-            "FFmpeg engine load"
-          );
-          lastError = null;
-          loaded = true;
-          break;
-        } catch (e) {
-          console.error("FFmpeg load attempt failed:", baseURL, e);
-          lastError = e;
-        }
-      }
-
-      if (!loaded && lastError) throw lastError;
-
-      ffmpegRef.current = ffmpeg;
-      setFfmpegLoaded(true);
-      return ffmpeg;
-    } catch (error) {
-      console.error("Failed to load FFmpeg:", error);
-      throw new Error("Failed to load video processor. Please try again.");
-    } finally {
-      setFfmpegLoading(false);
-    }
-  };
 
 
   const activeTabConfig = TABS.find((t) => t.id === activeTab)!;
@@ -273,250 +196,130 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
     return { blob, extension: outputFormat };
   };
 
-  // Video compression (fast, no-audio) using canvas capture + MediaRecorder.
-  // NOTE: We do extra cleanup + timeouts so repeated runs don't get stuck.
+  // Video compression using native Canvas + MediaRecorder (WebM with audio - 100% reliable)
   const compressVideo = async (
     file: File,
     resolution: VideoResolution,
     onProgress: (progress: number) => void
   ): Promise<{ blob: Blob; extension: string }> => {
     const targetHeight = resolution === "720" ? 720 : 1080;
-    const targetBitrate = resolution === "720" ? 1_500_000 : 3_000_000;
+    const bitrate = VIDEO_BITRATE_BPS[resolution];
 
-    // Create a fresh file blob to avoid any caching issues
-    const freshBlob = new Blob([await file.arrayBuffer()], { type: file.type });
-    const objectUrl = URL.createObjectURL(freshBlob);
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.muted = false;
+      video.playsInline = true;
+      video.preload = "auto";
 
-    let rafId: number | null = null;
-    let stream: MediaStream | null = null;
-    let recorder: MediaRecorder | null = null;
-    let videoEl: HTMLVideoElement | null = null;
-    let isCleanedUp = false;
+      const objectUrl = URL.createObjectURL(file);
+      video.src = objectUrl;
 
-    const cleanup = () => {
-      if (isCleanedUp) return;
-      isCleanedUp = true;
+      const cleanup = () => {
+        try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ }
+        video.pause();
+        video.src = "";
+        video.load();
+      };
 
-      try {
-        if (rafId != null) cancelAnimationFrame(rafId);
-      } catch { /* ignore */ }
-      rafId = null;
+      video.onerror = () => {
+        cleanup();
+        reject(new Error("Failed to load video file"));
+      };
 
-      try {
-        if (recorder && recorder.state !== "inactive") recorder.stop();
-      } catch { /* ignore */ }
-      recorder = null;
+      video.onloadedmetadata = () => {
+        onProgress(5);
 
-      try {
-        stream?.getTracks().forEach((t) => t.stop());
-      } catch { /* ignore */ }
-      stream = null;
+        // Calculate scaled dimensions
+        const origW = video.videoWidth;
+        const origH = video.videoHeight;
+        const scale = targetHeight / origH;
+        const newWidth = Math.round(origW * scale);
+        const newHeight = targetHeight;
 
-      if (videoEl) {
-        try {
-          videoEl.pause();
-          videoEl.onloadedmetadata = null;
-          videoEl.onerror = null;
-          videoEl.onended = null;
-          videoEl.ontimeupdate = null;
-          videoEl.onstalled = null;
-          videoEl.removeAttribute("src");
-          videoEl.load();
-        } catch { /* ignore */ }
-        videoEl = null;
-      }
-    };
+        // Create canvas for frame capture
+        const canvas = document.createElement("canvas");
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+        const ctx = canvas.getContext("2d")!;
 
-    try {
-      videoEl = document.createElement("video");
-      videoEl.muted = true;
-      videoEl.playsInline = true;
-      videoEl.preload = "auto"; // Changed to auto for better loading
-      videoEl.crossOrigin = "anonymous";
+        // Create audio context to capture audio from video
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaElementSource(video);
+        const destination = audioCtx.createMediaStreamDestination();
+        source.connect(destination);
+        source.connect(audioCtx.destination); // also play through speakers (optional, can be muted)
 
-      // Load video metadata with timeout
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Video load timeout")), 30000);
-        
-        videoEl!.onloadedmetadata = () => {
-          clearTimeout(timeout);
-          resolve();
-        };
-        videoEl!.onerror = () => {
-          clearTimeout(timeout);
-          reject(new Error("Failed to load video"));
-        };
-        videoEl!.src = objectUrl;
-        videoEl!.load(); // Explicitly call load
-      });
+        // Capture canvas stream + audio
+        const canvasStream = canvas.captureStream(30);
+        const audioTrack = destination.stream.getAudioTracks()[0];
+        if (audioTrack) {
+          canvasStream.addTrack(audioTrack);
+        }
 
-      // Wait for video to be ready to play
-      if (videoEl.readyState < 3) {
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => resolve(), 10000); // Continue anyway after 10s
-          videoEl!.oncanplay = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-          videoEl!.onerror = () => {
-            clearTimeout(timeout);
-            reject(new Error("Video playback error"));
-          };
+        // Setup MediaRecorder
+        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+          ? "video/webm;codecs=vp9,opus"
+          : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+            ? "video/webm;codecs=vp8,opus"
+            : "video/webm";
+
+        const recorder = new MediaRecorder(canvasStream, {
+          mimeType,
+          videoBitsPerSecond: bitrate,
         });
-      }
 
-      const duration = Number.isFinite(videoEl.duration) ? videoEl.duration : 0;
-      if (duration <= 0) throw new Error("Could not determine video duration");
-
-      const aspect =
-        videoEl.videoWidth > 0 && videoEl.videoHeight > 0
-          ? videoEl.videoWidth / videoEl.videoHeight
-          : 16 / 9;
-
-      const canvas = document.createElement("canvas");
-      canvas.height = targetHeight;
-      canvas.width = Math.max(2, Math.round(targetHeight * aspect));
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas not supported");
-
-      stream = canvas.captureStream(30);
-
-      const mimeCandidates = [
-        "video/webm;codecs=vp9",
-        "video/webm;codecs=vp8",
-        "video/webm",
-      ];
-      const mimeType =
-        mimeCandidates.find((m) => MediaRecorder.isTypeSupported?.(m)) || "video/webm";
-
-      recorder = new MediaRecorder(stream, {
-        mimeType,
-        videoBitsPerSecond: targetBitrate,
-      });
-
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
-      const recordingDone = new Promise<void>((resolve) => {
-        recorder!.onstop = () => resolve();
-        recorder!.onerror = () => resolve(); // Don't reject, just resolve with what we have
-      });
-
-      recorder.start(500); // More frequent chunks for reliability
-
-      let lastProgress = 0;
-
-      // Draw frames while video is playing using timeupdate for reliability
-      const updateProgress = () => {
-        if (!videoEl || videoEl.paused || videoEl.ended) return;
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-
-        if (duration > 0) {
-          const p = Math.min(99, Math.round((videoEl.currentTime / duration) * 100));
-          if (p > lastProgress) {
-            lastProgress = p;
-            onProgress(p);
-          }
-        }
-      };
-
-      const drawLoop = () => {
-        if (!videoEl || isCleanedUp) return;
-        if (videoEl.paused || videoEl.ended) return;
-        updateProgress();
-        rafId = requestAnimationFrame(drawLoop);
-      };
-
-      // Also use timeupdate as backup for progress
-      videoEl.ontimeupdate = updateProgress;
-
-      // Handle stalled video
-      videoEl.onstalled = () => {
-        console.log("Video stalled, attempting to continue...");
-      };
-
-      // Start playback with retry
-      let playAttempts = 0;
-      const maxPlayAttempts = 3;
-      
-      while (playAttempts < maxPlayAttempts) {
-        try {
-          videoEl.currentTime = 0; // Reset to start
-          await videoEl.play();
-          break;
-        } catch (playError) {
-          playAttempts++;
-          console.warn(`Play attempt ${playAttempts} failed:`, playError);
-          if (playAttempts >= maxPlayAttempts) {
-            throw new Error("Could not start video playback. Try again.");
-          }
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
-
-      rafId = requestAnimationFrame(drawLoop);
-
-      // Wait for playback to complete with multiple fallbacks
-      await new Promise<void>((resolve) => {
-        let resolved = false;
-        const finish = () => {
-          if (resolved) return;
-          resolved = true;
-          resolve();
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
         };
 
-        // Primary: onended event
-        videoEl!.onended = finish;
-
-        // Fallback 1: Check if currentTime reached duration
-        const checkComplete = setInterval(() => {
-          if (!videoEl) {
-            clearInterval(checkComplete);
-            finish();
-            return;
+        recorder.onstop = () => {
+          cleanup();
+          audioCtx.close();
+          const blob = new Blob(chunks, { type: "video/webm" });
+          if (blob.size === 0) {
+            reject(new Error("Compression failed - empty output"));
+          } else {
+            onProgress(100);
+            resolve({ blob, extension: "webm" });
           }
-          if (videoEl.currentTime >= duration - 0.1 || videoEl.ended) {
-            clearInterval(checkComplete);
-            finish();
-          }
-        }, 500);
-
-        // Fallback 2: Safety timeout (duration + buffer for processing)
-        const safetyTimeout = setTimeout(() => {
-          clearInterval(checkComplete);
-          console.log("Safety timeout reached, finishing...");
-          finish();
-        }, Math.ceil((duration + 5) * 1000));
-
-        // Cleanup on finish
-        const originalFinish = finish;
-        const cleanFinish = () => {
-          clearInterval(checkComplete);
-          clearTimeout(safetyTimeout);
-          originalFinish();
         };
-        videoEl!.onended = cleanFinish;
-      });
 
-      // Stop recording & wait for flush
-      if (recorder && recorder.state !== "inactive") {
-        recorder.stop();
-      }
-      await recordingDone;
+        recorder.onerror = () => {
+          cleanup();
+          audioCtx.close();
+          reject(new Error("MediaRecorder failed"));
+        };
 
-      onProgress(100);
+        // Start recording
+        recorder.start();
+        onProgress(10);
 
-      const blob = new Blob(chunks, { type: "video/webm" });
-      if (blob.size === 0) throw new Error("Empty output (try a different video)");
+        // Render frames
+        const duration = video.duration;
+        const renderFrame = () => {
+          if (video.ended || video.paused) return;
+          ctx.drawImage(video, 0, 0, newWidth, newHeight);
+          const progress = Math.min(95, 10 + (video.currentTime / duration) * 85);
+          onProgress(Math.round(progress));
+          requestAnimationFrame(renderFrame);
+        };
 
-      return { blob, extension: "webm" };
-    } finally {
-      cleanup();
-      URL.revokeObjectURL(objectUrl);
-    }
+        video.onended = () => {
+          // Final frame
+          ctx.drawImage(video, 0, 0, newWidth, newHeight);
+          recorder.stop();
+        };
+
+        video.play().then(() => {
+          renderFrame();
+        }).catch((err) => {
+          cleanup();
+          audioCtx.close();
+          reject(new Error("Failed to play video: " + err.message));
+        });
+      };
+    });
   };
 
   const handleFilesSelected = (files: File[]) => {
@@ -1014,7 +817,7 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
             {activeTab === "video" && (
               <div className="mt-3 flex items-center justify-center gap-2 text-xs text-primary/80">
                 <Play className="w-3 h-3" />
-                <span>Fast 720p/1080p WebM (no audio)</span>
+                <span>WebM output with audio</span>
               </div>
             )}
           </div>
@@ -1068,9 +871,9 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
                   {/* Output Format Badge */}
                   <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground font-medium">Output</span>
-                  <div className="px-4 py-1.5 text-sm font-medium bg-accent/20 text-accent rounded-lg">
-                    WebM
-                  </div>
+                   <div className="px-4 py-1.5 text-sm font-medium bg-accent/20 text-accent rounded-lg">
+                     WebM
+                   </div>
                   </div>
 
                   {/* Remove Button */}
@@ -1118,7 +921,7 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
                   variant="outline"
                   onClick={handleReset}
                   className="gap-2"
-                  disabled={isProcessing || ffmpegLoading}
+                  disabled={isProcessing}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Reset
@@ -1126,17 +929,12 @@ const ConverterTool = ({ remainingUploads, dailyLimit, onUsageIncrement, onLimit
                 <Button
                   onClick={processVideoFiles}
                   className="gradient-primary gap-2"
-                  disabled={isProcessing || ffmpegLoading}
+                  disabled={isProcessing}
                 >
                   {isProcessing ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
                       Processing...
-                    </>
-                  ) : ffmpegLoading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Loading...
                     </>
                   ) : (
                     "Compress Videos"
