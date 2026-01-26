@@ -1,26 +1,24 @@
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
-import Hero from "@/components/landing/Hero";
-import Features from "@/components/landing/Features";
-import VideoSection from "@/components/landing/VideoSection";
-import HowItWorks from "@/components/landing/HowItWorks";
-import Testimonials from "@/components/landing/Testimonials";
-import CTA from "@/components/landing/CTA";
+import HeroSection from "@/components/CaseStudy/HeroSection";
+import OverviewSection from "@/components/CaseStudy/OverviewSection";
+import ProblemSection from "@/components/CaseStudy/ProblemSection";
+import SolutionSection from "@/components/CaseStudy/SolutionSection";
+import DesignSystemSection from "@/components/CaseStudy/DesignSystemSection";
+import ScreensSection from "@/components/CaseStudy/ScreensSection";
+import ResultsSection from "@/components/CaseStudy/ResultsSection";
+import FooterSection from "@/components/CaseStudy/FooterSection";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <main>
-        <Hero />
-        <Features />
-        <VideoSection />
-        <HowItWorks />
-        <Testimonials />
-        <CTA />
-      </main>
-      <Footer />
-    </div>
+    <main className="min-h-screen">
+      <HeroSection />
+      <OverviewSection />
+      <ProblemSection />
+      <SolutionSection />
+      <DesignSystemSection />
+      <ScreensSection />
+      <ResultsSection />
+      <FooterSection />
+    </main>
   );
 };
 
